@@ -1,118 +1,106 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
+import React, { useState, useEffect } from 'react';
+import { View, Text, Button, TextInput, FlatList, PermissionsAndroid } from 'react-native';
+import RNBluetoothClassic from 'react-native-bluetooth-classic';
 
-import React from 'react';
-import type {PropsWithChildren} from 'react';
-import {
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  useColorScheme,
-  View,
-} from 'react-native';
+export default function App() {
+  const [devices, setDevices] = useState([]);
+  const [connectedDevice, setConnectedDevice] = useState(null);
+  const [message, setMessage] = useState('');
+  const [messages, setMessages] = useState([]);
 
-import {
-  Colors,
-  DebugInstructions,
-  Header,
-  LearnMoreLinks,
-  ReloadInstructions,
-} from 'react-native/Libraries/NewAppScreen';
+  // Demande d’autorisation pour Android 6.0 et plus
+  useEffect(() => {
+    async function requestPermissions() {
+      if (Platform.OS === 'android') {
+        await PermissionsAndroid.requestMultiple([
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH,
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_ADMIN,
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+        ]);
+      }
+    }
+    requestPermissions();
+  }, []);
 
-type SectionProps = PropsWithChildren<{
-  title: string;
-}>;
+  // Recherche des appareils Bluetooth
+  const scanDevices = async () => {
+    try {
+      const availableDevices = await RNBluetoothClassic.list();
+      setDevices(availableDevices);
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
-function Section({children, title}: SectionProps): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
-  return (
-    <View style={styles.sectionContainer}>
-      <Text
-        style={[
-          styles.sectionTitle,
-          {
-            color: isDarkMode ? Colors.white : Colors.black,
-          },
-        ]}>
-        {title}
-      </Text>
-      <Text
-        style={[
-          styles.sectionDescription,
-          {
-            color: isDarkMode ? Colors.light : Colors.dark,
-          },
-        ]}>
-        {children}
-      </Text>
-    </View>
-  );
-}
+  // Connexion à un appareil
+  const connectToDevice = async (device) => {
+    try {
+      const connection = await device.connect();
+      if (connection) {
+        setConnectedDevice(device);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
-function App(): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
+  // Envoi d’un message via Bluetooth
+  const sendMessage = async () => {
+    if (connectedDevice && message) {
+      try {
+        await connectedDevice.write(message + '\n');
+        setMessages([...messages, { sent: true, text: message }]);
+        setMessage('');
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  };
 
-  const backgroundStyle = {
-    backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
+  // Réception des messages (implémentation simple pour tester)
+  const readMessages = async () => {
+    if (connectedDevice) {
+      try {
+        const received = await connectedDevice.read();
+        setMessages([...messages, { sent: false, text: received }]);
+      } catch (error) {
+        console.error(error);
+      }
+    }
   };
 
   return (
-    <SafeAreaView style={backgroundStyle}>
-      <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={backgroundStyle.backgroundColor}
+    <View style={{ padding: 20 }}>
+      <Button title="Scan Devices" onPress={scanDevices} />
+      <FlatList
+        data={devices}
+        keyExtractor={(item) => item.address}
+        renderItem={({ item }) => (
+          <Button title={`Connect to ${item.name}`} onPress={() => connectToDevice(item)} />
+        )}
       />
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        style={backgroundStyle}>
-        <Header />
-        <View
-          style={{
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
-          }}>
-          <Section title="Step One">
-            Edit <Text style={styles.highlight}>App.tsx</Text> to change this
-            screen and then come back to see your edits.
-          </Section>
-          <Section title="See Your Changes">
-            <ReloadInstructions />
-          </Section>
-          <Section title="Debug">
-            <DebugInstructions />
-          </Section>
-          <Section title="Learn More">
-            Read the docs to discover what to do next:
-          </Section>
-          <LearnMoreLinks />
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+      {connectedDevice && (
+        <>
+          <Text>Connected to {connectedDevice.name}</Text>
+          <TextInput
+            placeholder="Type a message"
+            value={message}
+            onChangeText={setMessage}
+            style={{ borderWidth: 1, padding: 10, marginVertical: 10 }}
+          />
+          <Button title="Send Message" onPress={sendMessage} />
+          <Button title="Receive Messages" onPress={readMessages} />
+          <FlatList
+            data={messages}
+            keyExtractor={(item, index) => index.toString()}
+            renderItem={({ item }) => (
+              <Text style={{ color: item.sent ? 'blue' : 'green' }}>
+                {item.sent ? 'Sent: ' : 'Received: '}{item.text}
+              </Text>
+            )}
+          />
+        </>
+      )}
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  sectionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 24,
-  },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-  },
-  sectionDescription: {
-    marginTop: 8,
-    fontSize: 18,
-    fontWeight: '400',
-  },
-  highlight: {
-    fontWeight: '700',
-  },
-});
-
-export default App;
